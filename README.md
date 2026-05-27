@@ -132,6 +132,7 @@ mkdir -p data
 Edit `.env.production` before starting:
 
 ```env
+PORTAL_HOST_IP=10.4.51.65
 PUBLIC_BASE_URL=https://10.4.51.232:18443
 APP_UPSTREAM_PORT=18085
 OPENSEARCH_INITIAL_ADMIN_PASSWORD=<long-random-bootstrap-password>

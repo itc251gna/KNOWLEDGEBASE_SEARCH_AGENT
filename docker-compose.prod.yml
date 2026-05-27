@@ -51,6 +51,8 @@ services:
         condition: service_healthy
       tika:
         condition: service_healthy
+    extra_hosts:
+      - "251gna:${PORTAL_HOST_IP:-10.4.51.65}"
     volumes:
       - ./data:/app/data
     ports:
@@ -76,6 +78,8 @@ services:
         condition: service_healthy
       tika:
         condition: service_healthy
+    extra_hosts:
+      - "251gna:${PORTAL_HOST_IP:-10.4.51.65}"
     volumes:
       - ./data:/app/data
     security_opt:
