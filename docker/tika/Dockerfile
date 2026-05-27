@@ -4,6 +4,7 @@ USER root
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
+        curl \
         tesseract-ocr-eng \
         tesseract-ocr-ell \
     && rm -rf /var/lib/apt/lists/*
