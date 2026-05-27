@@ -2,10 +2,11 @@ services:
   opensearch:
     image: opensearchproject/opensearch:2
     restart: unless-stopped
+    env_file:
+      - .env.production
     environment:
       discovery.type: single-node
       plugins.security.disabled: "true"
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${OPENSEARCH_INITIAL_ADMIN_PASSWORD:-change-this-opensearch-bootstrap-password}"
       bootstrap.memory_lock: "true"
       OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
     ulimits:
