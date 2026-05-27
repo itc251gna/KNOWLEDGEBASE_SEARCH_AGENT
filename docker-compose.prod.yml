@@ -54,7 +54,7 @@ services:
     volumes:
       - ./data:/app/data
     ports:
-      - "127.0.0.1:${APP_UPSTREAM_PORT:-18080}:8080"
+      - "127.0.0.1:${APP_UPSTREAM_PORT:-18085}:8080"
     security_opt:
       - no-new-privileges:true
     healthcheck:

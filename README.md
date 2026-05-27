@@ -133,7 +133,7 @@ Edit `.env.production` before starting:
 
 ```env
 PUBLIC_BASE_URL=https://10.4.51.232:18443
-APP_UPSTREAM_PORT=18080
+APP_UPSTREAM_PORT=18085
 OPENSEARCH_INITIAL_ADMIN_PASSWORD=<long-random-bootstrap-password>
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=<long-random-password>
