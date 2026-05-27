@@ -4,7 +4,7 @@ services:
     environment:
       discovery.type: single-node
       plugins.security.disabled: "true"
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "local-dev-only-password"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "LocalDevOnly1!"
       bootstrap.memory_lock: "true"
       OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
     ulimits:
