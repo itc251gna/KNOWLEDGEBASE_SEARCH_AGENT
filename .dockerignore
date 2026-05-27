@@ -1,0 +1,16 @@
+.env
+.env.production
+CREDENTIALS.local.md
+data/
+ssl/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+dist/
+build/
+.git/
+.gitignore
+*.log

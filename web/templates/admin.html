@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="el">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Portal Search Agent</title>
+    <link rel="stylesheet" href="/static/styles.css?v=portal-search-7">
+</head>
+<body>
+    <main class="app-shell">
+        <header class="app-header">
+            <div>
+                <h1>Portal Search Admin</h1>
+                <p>External knowledge-base search for {{ start_url }}</p>
+            </div>
+            <div class="header-actions">
+                <a class="ghost-button" href="/" target="_blank" rel="noopener">Open User Search</a>
+                <section class="admin-auth" id="adminLoginBox" aria-label="Admin access">
+                    <div class="admin-auth-copy">
+                        <strong>Admin session</strong>
+                        <p class="muted">Crawler, diagnostics and tuning</p>
+                    </div>
+                    <form class="login-form" id="adminLoginForm">
+                        <input id="adminUsername" type="text" autocomplete="username" value="{{ admin_username }}" placeholder="Username" aria-label="Admin username">
+                        <input id="adminPassword" type="password" autocomplete="current-password" placeholder="Password" aria-label="Admin password">
+                        <button id="adminLoginButton" type="submit">Login</button>
+                        <button id="adminLogoutButton" class="ghost-button" type="button">Logout</button>
+                    </form>
+                    <div id="adminAuthStatus" class="status">Checking admin session...</div>
+                </section>
+            </div>
+        </header>
+
+        <nav class="tabs" aria-label="Application sections">
+            <button class="tab is-active" type="button" data-tab="search">Search</button>
+            <button class="tab" type="button" data-tab="crawler">Knowledge Build</button>
+            <button class="tab" type="button" data-tab="diagnostics">Diagnostics</button>
+            <button class="tab" type="button" data-tab="tuning">Search Tuning</button>
+            <button class="tab" type="button" data-tab="integration">Portal Integration</button>
+        </nav>
+
+        <section id="tab-search" class="panel is-active">
+            <div class="searchbar" aria-label="Portal search">
+                <input id="query" data-search-query type="search" autocomplete="off" list="searchSuggestions" placeholder="Search pages, applications, PDFs, Word, Excel, PowerPoint and announcements">
+                <button data-search-button type="button">Search</button>
+            </div>
+            <datalist id="searchSuggestions" data-search-suggestions></datalist>
+            <section class="source-row" data-search-source-scopes aria-label="Knowledge base source"></section>
+            <section class="filter-row" data-search-filters aria-label="Search filters"></section>
+            <div id="status" class="status" data-search-status>Type at least 2 characters.</div>
+            <section id="results" class="results" data-search-results aria-live="polite"></section>
+        </section>
+
+        <section id="tab-crawler" class="panel">
+            <div class="control-grid">
+                <div class="control-main">
+                    <h2>Knowledge Base Build</h2>
+                    <p class="muted">Choose which source set will feed the shared search index.</p>
+
+                    <section class="build-source-box" aria-label="Knowledge base build source">
+                        <div>
+                            <strong>Build source</strong>
+                            <p class="muted">The embedded search remains Portal-only by default.</p>
+                        </div>
+                        <div id="buildSourceList" class="build-source-list"></div>
+                        <div id="kbSourceSummary" class="status">Loading configured sources...</div>
+                    </section>
+
+                    <div class="action-row">
+                        <button id="startIncremental" type="button">Start Build</button>
+                        <button id="startFull" type="button">Full Rebuild</button>
+                        <button id="stopCrawl" class="danger-button" type="button">Stop</button>
+                    </div>
+                    <div id="kbBuildStatus" class="status">Select a source set, then start a build.</div>
+
+                    <div class="progress-wrap">
+                        <div class="progress-label">
+                            <span id="crawlMessage">Idle</span>
+                            <span id="crawlPercent">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div id="crawlProgress" class="progress-bar"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <aside class="metric-panel">
+                    <div class="metric"><span>Indexed</span><strong id="metricDocuments">0</strong></div>
+                    <div class="metric"><span>Queued</span><strong id="metricQueued">0</strong></div>
+                    <div class="metric"><span>Done</span><strong id="metricDone">0</strong></div>
+                    <div class="metric"><span>Failed</span><strong id="metricFailed">0</strong></div>
+                    <div class="metric"><span>Target</span><strong id="metricTarget">-</strong></div>
+                    <div class="metric"><span>Source</span><strong id="metricSource">-</strong></div>
+                </aside>
+            </div>
+
+            <section class="event-log">
+                <h3>Recent Events</h3>
+                <div id="crawlEvents" class="events"></div>
+            </section>
+
+            <section class="admin-card section-block">
+                <div class="section-title-row source-section-title">
+                    <div>
+                        <h3>Configured Knowledge Sources</h3>
+                        <p class="muted">Register the source sets that can feed this knowledge base.</p>
+                    </div>
+                    <button id="openKbSourceDialog" type="button">Add Source</button>
+                </div>
+                <div id="kbSourceFormStatus" class="status">Register portal, web, file folder, or database sources here.</div>
+                <div id="kbSourceList" class="table-list"></div>
+            </section>
+
+            <section class="admin-card section-block">
+                <h3>Knowledge Store & Backup</h3>
+                <div id="kbStoreInfo" class="compact-list"></div>
+                <div class="action-row">
+                    <button id="createKbBackup" class="ghost-button" type="button">Create Backup</button>
+                </div>
+                <div id="kbBackupStatus" class="status">Backups include local metadata, source registry and crawler database.</div>
+            </section>
+        </section>
+
+        <dialog id="kbSourceDialog" class="source-dialog" aria-labelledby="kbSourceDialogTitle">
+            <form id="kbSourceDialogForm" class="source-dialog-panel" method="dialog">
+                <div class="source-dialog-header">
+                    <div>
+                        <h3 id="kbSourceDialogTitle">Add Knowledge Source</h3>
+                        <p class="muted">Choose the source kind, then register the location the crawler can reach.</p>
+                    </div>
+                    <button id="closeKbSourceDialog" class="ghost-button small-button" type="button" aria-label="Close source dialog">Close</button>
+                </div>
+
+                <div class="source-type-grid" role="radiogroup" aria-label="Knowledge source type">
+                    <label class="source-type-card">
+                        <input type="radio" name="kbSourceKind" value="web" checked>
+                        <strong>Web Link</strong>
+                        <span>Internet or intranet application URL</span>
+                    </label>
+                    <label class="source-type-card">
+                        <input type="radio" name="kbSourceKind" value="portal">
+                        <strong>Portal</strong>
+                        <span>Another WordPress portal root</span>
+                    </label>
+                    <label class="source-type-card">
+                        <input type="radio" name="kbSourceKind" value="folder">
+                        <strong>Folder</strong>
+                        <span>Server or Docker-mounted folder path</span>
+                    </label>
+                    <label class="source-type-card">
+                        <input type="radio" name="kbSourceKind" value="file">
+                        <strong>File</strong>
+                        <span>Single PDF, Word, Excel, PowerPoint or text file</span>
+                    </label>
+                    <label class="source-type-card">
+                        <input type="radio" name="kbSourceKind" value="database">
+                        <strong>Database</strong>
+                        <span>Connector registration for a later adapter</span>
+                    </label>
+                </div>
+
+                <input id="kbSourceType" type="hidden" value="web">
+                <label class="source-field">
+                    <span>Display name</span>
+                    <input id="kbSourceName" type="text" autocomplete="off" placeholder="Optional friendly name">
+                </label>
+                <label class="source-field">
+                    <span id="kbSourceLocationLabel">Source URL</span>
+                    <input id="kbSourceLocation" type="text" autocomplete="off" placeholder="https://intranet/app">
+                </label>
+                <div id="kbSourcePathHint" class="source-hint">Use a URL reachable from the crawler container.</div>
+                <div id="kbSourceDialogStatus" class="status">Ready to save a new knowledge source.</div>
+
+                <div class="dialog-actions">
+                    <button id="saveKbSource" type="button">Save Source</button>
+                    <button id="cancelKbSourceDialog" class="ghost-button" type="button">Cancel</button>
+                </div>
+            </form>
+        </dialog>
+
+        <section id="tab-diagnostics" class="panel">
+            <div class="section-title-row">
+                <div>
+                    <h2>Diagnostics</h2>
+                    <p class="muted">Coverage, failures, content types, requeue tools and nightly health report.</p>
+                </div>
+                <button id="refreshDiagnostics" type="button">Refresh</button>
+            </div>
+
+            <div class="admin-grid">
+                <section class="admin-card">
+                    <h3>Coverage</h3>
+                    <div id="diagnosticStats" class="compact-list"></div>
+                </section>
+                <section class="admin-card">
+                    <h3>Content Types</h3>
+                    <div id="contentTypes" class="compact-list"></div>
+                </section>
+                <section class="admin-card">
+                    <h3>Source Types</h3>
+                    <div id="sourceTypes" class="compact-list"></div>
+                </section>
+                <section class="admin-card">
+                    <h3>Health Report</h3>
+                    <div id="healthReport" class="compact-list"></div>
+                    <button id="createHealthReport" class="ghost-button small-button" type="button">Create report</button>
+                </section>
+            </div>
+
+            <section class="admin-card section-block">
+                <h3>Targeted Requeue</h3>
+                <div class="action-row">
+                    <button type="button" data-requeue-mode="failed">Retry Failed</button>
+                    <button type="button" data-requeue-mode="category" data-requeue-category="documents">Reindex Documents</button>
+                    <button type="button" data-requeue-mode="category" data-requeue-category="links">Reindex Links</button>
+                    <button type="button" data-requeue-mode="category" data-requeue-category="applications">Reindex Applications</button>
+                </div>
+                <div class="inline-form url-requeue">
+                    <input id="requeueUrl" type="search" autocomplete="off" placeholder="Specific URL to requeue">
+                    <button id="requeueOneUrl" type="button">Requeue URL</button>
+                </div>
+                <div id="requeueStatus" class="status" aria-live="polite">These actions put URLs back in the queue. Use Start Build to process queued items.</div>
+            </section>
+
+            <section class="admin-card section-block">
+                <h3>Failed URLs</h3>
+                <div id="failedUrls" class="table-list"></div>
+            </section>
+
+            <section class="admin-card section-block">
+                <h3>Largest Documents</h3>
+                <div id="largestDocuments" class="table-list"></div>
+            </section>
+        </section>
+
+        <section id="tab-tuning" class="panel">
+            <div class="section-title-row">
+                <div>
+                    <h2>Search Tuning</h2>
+                    <p class="muted">Managed synonyms, query analytics and user feedback.</p>
+                </div>
+                <button id="refreshTuning" type="button">Refresh</button>
+            </div>
+
+            <section class="admin-card section-block">
+                <h3>Synonym Dictionary</h3>
+                <div class="synonym-form">
+                    <input id="synonymTerm" type="search" autocomplete="off" placeholder="Term, e.g. ΔΝΥ">
+                    <input id="synonymVariants" type="search" autocomplete="off" placeholder="Variants, comma separated: ΔΝY, DNY, εφαρμογή ΔΝΥ">
+                    <button id="saveSynonym" type="button">Save</button>
+                </div>
+                <div id="synonymList" class="table-list"></div>
+            </section>
+
+            <div class="admin-grid">
+                <section class="admin-card">
+                    <h3>Top Queries</h3>
+                    <div id="topQueries" class="compact-list"></div>
+                </section>
+                <section class="admin-card">
+                    <h3>Zero Result Queries</h3>
+                    <div id="zeroQueries" class="compact-list"></div>
+                </section>
+                <section class="admin-card">
+                    <h3>Top Clicked Results</h3>
+                    <div id="topClicks" class="compact-list"></div>
+                </section>
+            </div>
+
+            <section class="admin-card section-block">
+                <h3>User Feedback</h3>
+                <div id="feedbackList" class="table-list"></div>
+            </section>
+        </section>
+
+        <section id="tab-integration" class="panel">
+            <h2>Portal Integration</h2>
+            <p class="muted">Users should receive only the search page. Keep this admin page for crawler control.</p>
+
+            <div class="snippet-grid">
+                <div>
+                    <h3>Direct link</h3>
+                    <pre><code id="directLink">{{ public_base_url }}/embed</code></pre>
+                </div>
+                <div>
+                    <h3>Button HTML</h3>
+                    <pre><code id="buttonSnippet">&lt;a class=&quot;portal-search-button&quot; href=&quot;{{ public_base_url }}/embed&quot;&gt;Search Portal Knowledge Base&lt;/a&gt;</code></pre>
+                </div>
+                <div>
+                    <h3>Iframe HTML</h3>
+                    <pre><code id="iframeSnippet">&lt;iframe src=&quot;{{ public_base_url }}/embed&quot; style=&quot;width:100%;height:900px;border:0;&quot; title=&quot;Portal Search&quot;&gt;&lt;/iframe&gt;</code></pre>
+                </div>
+            </div>
+
+            <p class="muted">Recommended first step: add a WordPress menu link named "Portal Search" pointing to the direct link above. If you want it visually inside a WordPress page, use the iframe snippet. Neither option exposes crawler controls.</p>
+        </section>
+    </main>
+
+    <script src="/static/portal_search.js?v=portal-search-5"></script>
+    <script>
+        let adminAuthenticated = false;
+        let adminUsername = "";
+        let pendingRequeueCount = 0;
+        let pendingRequeueMessageActive = false;
+        let kbSources = [];
+        const kbSourceKindConfig = {
+            web: {
+                type: "web",
+                label: "Web Link",
+                locationLabel: "Source URL",
+                locationPlaceholder: "https://intranet/app",
+                namePlaceholder: "Optional friendly name",
+                hint: "Use a URL reachable from the crawler container.",
+                options: {},
+            },
+            portal: {
+                type: "portal",
+                label: "Portal",
+                locationLabel: "Portal root URL",
+                locationPlaceholder: "http://251gna/wp_root",
+                namePlaceholder: "Portal name",
+                hint: "Use the root page of the WordPress portal you want to crawl.",
+                options: {},
+            },
+            folder: {
+                type: "filesystem",
+                label: "Folder",
+                locationLabel: "Server folder path",
+                locationPlaceholder: "/app/data/shared-folder",
+                namePlaceholder: "Folder source name",
+                hint: "For Docker, use a mounted path that exists inside the app container, for example /app/data/shared-folder.",
+                options: {path_kind: "folder"},
+            },
+            file: {
+                type: "filesystem",
+                label: "File",
+                locationLabel: "Server file path",
+                locationPlaceholder: "/app/data/shared-folder/example.pdf",
+                namePlaceholder: "File source name",
+                hint: "Use the exact path of a PDF, Word, Excel, PowerPoint, text or other supported document inside the app container.",
+                options: {path_kind: "file"},
+            },
+            database: {
+                type: "database",
+                label: "Database",
+                locationLabel: "Database DSN",
+                locationPlaceholder: "postgresql://user:pass@host:5432/database",
+                namePlaceholder: "Database connector name",
+                hint: "This registers the connector. Actual database extraction remains adapter-based.",
+                options: {adapter_status: "registered_only"},
+            },
+        };
+
+        function setStatusNode(id, message, isError = false) {
+            const node = document.getElementById(id);
+            if (!node) return;
+            node.textContent = message;
+            node.classList.toggle("is-error", isError);
+            node.classList.toggle("is-success", !isError && Boolean(message));
+        }
+
+        function setAdminStatus(message, isError = false) {
+            setStatusNode("adminAuthStatus", message, isError);
+        }
+
+        function showAdminError(error) {
+            setAdminStatus(error.message || String(error), true);
+        }
+
+        function showAdminErrorIfAuth(error) {
+            const message = error.message || String(error);
+            if (/login|session|admin/i.test(message)) showAdminError(error);
+        }
+
+        function setRequeueStatus(message, isError = false) {
+            setStatusNode("requeueStatus", message, isError);
+        }
+
+        function setRequeueBusy(isBusy) {
+            document.querySelectorAll("[data-requeue-mode], #requeueOneUrl").forEach(button => {
+                button.disabled = isBusy;
+            });
+        }
+
+        function selectedBuildSourceIds() {
+            return Array.from(document.querySelectorAll("[data-build-source-id]:checked")).map(item => item.value);
+        }
+
+        function allEnabledSourceIds() {
+            return kbSources
+                .filter(source => source.enabled && source.type !== "database")
+                .map(source => source.id);
+        }
+
+        function selectedBuildSourceLabel() {
+            const ids = new Set(selectedBuildSourceIds());
+            const selected = kbSources.filter(source => ids.has(source.id));
+            if (selected.length === 1) return selected[0].name;
+            if (selected.length > 1) return `${selected.length} sources`;
+            return "No source selected";
+        }
+
+        function setKbSummaryStatus(message, isError = false) {
+            setStatusNode("kbSourceSummary", message, isError);
+        }
+
+        function setKbBuildStatus(message, isError = false) {
+            setStatusNode("kbBuildStatus", message, isError);
+        }
+
+        function setKbSourceFormStatus(message, isError = false) {
+            setStatusNode("kbSourceFormStatus", message, isError);
+        }
+
+        function setKbSourceDialogStatus(message, isError = false) {
+            setStatusNode("kbSourceDialogStatus", message, isError);
+        }
+
+        function setKbBackupStatus(message, isError = false) {
+            setStatusNode("kbBackupStatus", message, isError);
+        }
+
+        function selectedKbSourceKind() {
+            return document.querySelector("input[name='kbSourceKind']:checked")?.value || "web";
+        }
+
+        function selectedKbSourceConfig() {
+            return kbSourceKindConfig[selectedKbSourceKind()] || kbSourceKindConfig.web;
+        }
+
+        function updateKbSourceDialogFields() {
+            const config = selectedKbSourceConfig();
+            document.getElementById("kbSourceType").value = config.type;
+            document.getElementById("kbSourceLocationLabel").textContent = config.locationLabel;
+            document.getElementById("kbSourceLocation").placeholder = config.locationPlaceholder;
+            document.getElementById("kbSourceName").placeholder = config.namePlaceholder;
+            document.getElementById("kbSourcePathHint").textContent = config.hint;
+            setKbSourceDialogStatus(`Ready to save a ${config.label.toLowerCase()} source.`);
+        }
+
+        function resetKbSourceDialog() {
+            document.getElementById("kbSourceName").value = "";
+            document.getElementById("kbSourceLocation").value = "";
+            const webKind = document.querySelector("input[name='kbSourceKind'][value='web']");
+            if (webKind) webKind.checked = true;
+            updateKbSourceDialogFields();
+        }
+
+        function openKbSourceDialog() {
+            if (!hasAdminSession()) {
+                setKbSourceFormStatus("Login in the header before changing sources.", true);
+                return;
+            }
+            resetKbSourceDialog();
+            const dialog = document.getElementById("kbSourceDialog");
+            if (dialog.showModal) dialog.showModal();
+            else dialog.setAttribute("open", "");
+        }
+
+        function closeKbSourceDialog() {
+            const dialog = document.getElementById("kbSourceDialog");
+            if (dialog.close) dialog.close();
+            else dialog.removeAttribute("open");
+        }
+
+        function kbSourceKindLabel(source) {
+            const options = source.options || {};
+            if (source.type === "filesystem" && options.path_kind === "file") return "File";
+            if (source.type === "filesystem") return "Folder";
+            if (source.type === "database") return "Database";
+            if (source.type === "portal") return "Portal";
+            return "Web Link";
+        }
+
+        function setLoginState(session) {
+            adminAuthenticated = Boolean(session && session.authenticated);
+            adminUsername = session && session.username ? session.username : "";
+            document.getElementById("adminLoginBox").classList.toggle("is-authenticated", adminAuthenticated);
+            document.getElementById("adminLogoutButton").style.display = adminAuthenticated ? "inline-flex" : "none";
+            document.getElementById("adminLoginButton").style.display = adminAuthenticated ? "none" : "inline-flex";
+            document.getElementById("adminPassword").style.display = adminAuthenticated ? "none" : "block";
+            document.getElementById("adminUsername").disabled = adminAuthenticated;
+            setAdminStatus(
+                adminAuthenticated
+                    ? `Logged in as ${adminUsername}.`
+                    : "Login here to unlock protected admin tools.",
+                false
+            );
+        }
+
+        function hasAdminSession() {
+            if (adminAuthenticated) return true;
+            setAdminStatus("Login in the header to unlock this protected admin tool.", true);
+            return false;
+        }
+
+        async function checkAdminSession() {
+            const response = await fetch("/api/admin/session", {credentials: "same-origin"});
+            const session = await response.json();
+            setLoginState(session);
+            if (session.authenticated) await loadKbSources();
+            return session;
+        }
+
+        async function loadCrawlStatus() {
+            const response = await fetch("/api/crawl/status");
+            const data = await response.json();
+            const stats = data.stats || {};
+            document.getElementById("metricDocuments").textContent = stats.documents || 0;
+            document.getElementById("metricQueued").textContent = stats.queued || 0;
+            document.getElementById("metricDone").textContent = stats.done || 0;
+            document.getElementById("metricFailed").textContent = stats.failed || 0;
+            document.getElementById("metricTarget").textContent = data.target_index || "-";
+            document.getElementById("metricSource").textContent = data.active_source || selectedBuildSourceLabel();
+            document.getElementById("crawlMessage").textContent = data.last_message || "Idle";
+            document.getElementById("crawlPercent").textContent = `${data.progress_percent || 0}%`;
+            document.getElementById("crawlProgress").style.width = `${data.progress_percent || 0}%`;
+            updateRequeueAfterCrawl(data, stats);
+
+            const events = document.getElementById("crawlEvents");
+            events.innerHTML = "";
+            for (const event of (data.events || []).slice().reverse()) {
+                const row = document.createElement("div");
+                row.className = "event-row";
+                row.textContent = `${event.time} - ${event.message}`;
+                events.appendChild(row);
+            }
+        }
+
+        async function adminFetch(path, options = {}) {
+            if (!hasAdminSession()) {
+                throw new Error("Login in the header to unlock this protected admin tool.");
+            }
+            const response = await fetch(path, {
+                ...options,
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...(options.headers || {}),
+                },
+            });
+            if (!response.ok) {
+                let detail = "";
+                try {
+                    const body = await response.json();
+                    detail = body.detail || "";
+                } catch (_) {
+                    detail = "";
+                }
+                const message = response.status === 401 ? "Admin session expired. Login again." : (detail || `Request failed: ${response.status}`);
+                if (response.status === 401) setLoginState({authenticated: false, username: ""});
+                throw new Error(message);
+            }
+            return response.json();
+        }
+
+        async function postCrawl(path, payload = null) {
+            const buildLabel = payload && payload.source_ids ? selectedBuildSourceLabel() : "";
+            setKbBuildStatus(path === "/api/crawl/stop" ? "Sending stop request..." : `Starting build for ${buildLabel || "selected source(s)"}...`);
+            try {
+                await adminFetch(path, {
+                    method: "POST",
+                    ...(payload ? {body: JSON.stringify(payload)} : {}),
+                });
+                if ((path.startsWith("/api/crawl/start") || path.startsWith("/api/kb/build")) && pendingRequeueMessageActive) {
+                    setRequeueStatus("Knowledge build started. Watching the targeted queue until it finishes...");
+                }
+                setKbBuildStatus(
+                    path === "/api/crawl/stop"
+                        ? "Stop requested. The current batch will finish cleanly."
+                        : `Build started for ${buildLabel || "selected source(s)"}. Watch progress below.`
+                );
+                await loadCrawlStatus();
+            } catch (error) {
+                setKbBuildStatus(error.message || String(error), true);
+                showAdminErrorIfAuth(error);
+            }
+        }
+
+        async function loadKbSources() {
+            if (!adminAuthenticated) {
+                setKbSummaryStatus("Login in the header to inspect configured build sources.");
+                return;
+            }
+            try {
+                const data = await adminFetch("/api/kb/sources");
+                const target = data.target || {};
+                const sources = data.sources || [];
+                kbSources = sources;
+                const store = data.store || {};
+                document.getElementById("metricTarget").textContent = target.index || "-";
+                renderBuildSourceChoices(sources);
+                renderKbSourceList(sources);
+                renderKbStoreInfo(target, store);
+                const enabledCount = sources.filter(source => source.enabled).length;
+                setKbSummaryStatus(`Target index: ${target.index || "-"} | ${enabledCount} enabled source(s) configured.`);
+            } catch (error) {
+                setKbSummaryStatus(error.message || String(error), true);
+                showAdminErrorIfAuth(error);
+            }
+        }
+
+        function renderBuildSourceChoices(sources) {
+            const node = document.getElementById("buildSourceList");
+            if (!node) return;
+            node.innerHTML = (sources || []).map(source => {
+                const disabled = !source.enabled || (source.type === "database");
+                const note = source.type === "database" ? "adapter pending" : (source.readable === false ? "check access" : kbSourceKindLabel(source).toLowerCase());
+                return `
+                    <label class="source-chip ${disabled ? "is-disabled" : ""}">
+                        <input type="checkbox" value="${PortalSearch.escapeHtml(source.id)}" data-build-source-id ${disabled ? "disabled" : "checked"}>
+                        ${PortalSearch.escapeHtml(source.name)}
+                        <span>${PortalSearch.escapeHtml(note)}</span>
+                    </label>
+                `;
+            }).join("") || `<div class="empty-state">No build sources configured.</div>`;
+        }
+
+        function renderKbSourceList(sources) {
+            const node = document.getElementById("kbSourceList");
+            if (!node) return;
+            node.innerHTML = (sources || []).map(source => {
+                const status = source.type === "database"
+                    ? "Registered - adapter needed"
+                    : (source.readable === false ? "Not readable" : (source.enabled ? "Enabled" : "Disabled"));
+                return `
+                    <div class="table-row source-row-item">
+                        <div><span>Name</span><strong>${PortalSearch.escapeHtml(source.name)}</strong></div>
+                        <div><span>Type</span><strong>${PortalSearch.escapeHtml(kbSourceKindLabel(source))}</strong></div>
+                        <div><span>Location</span><strong>${PortalSearch.escapeHtml(source.location)}</strong></div>
+                        <div><span>Status</span><strong>${PortalSearch.escapeHtml(status)}</strong></div>
+                        <button class="ghost-button small-button" type="button" data-delete-kb-source="${PortalSearch.escapeHtml(source.id)}">Delete</button>
+                    </div>
+                `;
+            }).join("") || `<div class="empty-state">No sources configured.</div>`;
+            node.querySelectorAll("[data-delete-kb-source]").forEach(button => {
+                button.addEventListener("click", async () => {
+                    try {
+                        await adminFetch(`/api/kb/sources/${encodeURIComponent(button.dataset.deleteKbSource)}`, {method: "DELETE"});
+                        setKbSourceFormStatus("Source deleted.");
+                        await loadKbSources();
+                    } catch (error) {
+                        setKbSourceFormStatus(error.message || String(error), true);
+                        showAdminErrorIfAuth(error);
+                    }
+                });
+            });
+        }
+
+        function renderKbStoreInfo(target, store) {
+            renderKeyValues(document.getElementById("kbStoreInfo"), [
+                {label: "Target index", value: target.index || "-"},
+                {label: "OpenSearch", value: target.url || "-"},
+                {label: "Knowledge data folder", value: store.data_dir || "-"},
+                {label: "Crawler database", value: store.sqlite_path || "-"},
+                {label: "Backup folder", value: store.backup_dir || "-"},
+            ]);
+        }
+
+        function updateRequeueAfterCrawl(data, stats) {
+            if (!pendingRequeueMessageActive) return;
+            const queued = Number(stats.queued || 0);
+            const processing = Number(stats.processing || 0);
+            const failed = Number(stats.failed || 0);
+            if (!data.running && queued > 0 && processing === 0) {
+                setRequeueStatus(
+                    `Queued ${queued} targeted URL(s). Open Knowledge Base Build and press Start Build to process them.`,
+                    false
+                );
+                return;
+            }
+            if (data.running || queued > 0 || processing > 0) {
+                setRequeueStatus(
+                    `Targeted queue is being processed: ${queued} queued, ${processing} processing.`,
+                    false
+                );
+                return;
+            }
+            setRequeueStatus(
+                failed > 0
+                    ? `Targeted queue finished after rechecking ${pendingRequeueCount} URL(s). ${failed} URL(s) are still failed; review Failed URLs or retry later.`
+                    : `Targeted queue finished after rechecking ${pendingRequeueCount} URL(s). No failed URLs remain.`,
+                failed > 0
+            );
+            pendingRequeueMessageActive = false;
+            pendingRequeueCount = 0;
+        }
+
+        function renderKeyValues(node, rows) {
+            node.innerHTML = rows.map(row => `
+                <div class="compact-row">
+                    <span>${PortalSearch.escapeHtml(row.label)}</span>
+                    <strong>${PortalSearch.escapeHtml(String(row.value))}</strong>
+                </div>
+            `).join("");
+        }
+
+        function renderCountList(node, rows) {
+            node.innerHTML = (rows || []).map(row => `
+                <div class="compact-row">
+                    <span>${PortalSearch.escapeHtml(row.value || row.query || row.title || row.url || "(empty)")}</span>
+                    <strong>${PortalSearch.escapeHtml(String(row.count || row.byte_size || ""))}</strong>
+                </div>
+            `).join("") || `<div class="empty-state">No data yet.</div>`;
+        }
+
+        function renderTableList(node, rows, columns) {
+            node.innerHTML = (rows || []).map(row => `
+                <div class="table-row">
+                    ${columns.map(column => `
+                        <div>
+                            <span>${PortalSearch.escapeHtml(column.label)}</span>
+                            <strong>${PortalSearch.escapeHtml(String(row[column.key] || ""))}</strong>
+                        </div>
+                    `).join("")}
+                </div>
+            `).join("") || `<div class="empty-state">No data.</div>`;
+        }
+
+        async function loadDiagnostics() {
+            const data = await adminFetch("/api/admin/diagnostics");
+            const stats = data.stats || {};
+            renderKeyValues(document.getElementById("diagnosticStats"), [
+                {label: "Indexed documents", value: stats.documents || 0},
+                {label: "Done URLs", value: stats.done || 0},
+                {label: "Queued URLs", value: stats.queued || 0},
+                {label: "Failed URLs", value: stats.failed || 0},
+            ]);
+            renderCountList(document.getElementById("contentTypes"), data.content_types);
+            renderCountList(document.getElementById("sourceTypes"), data.source_types);
+            renderTableList(document.getElementById("failedUrls"), data.failed_urls, [
+                {label: "URL", key: "url"},
+                {label: "Error", key: "error"},
+                {label: "Attempts", key: "attempts"},
+            ]);
+            renderTableList(document.getElementById("largestDocuments"), data.largest_documents, [
+                {label: "Title", key: "title"},
+                {label: "Type", key: "content_type"},
+                {label: "Bytes", key: "byte_size"},
+            ]);
+            const latest = data.latest_health_report || {};
+            renderKeyValues(document.getElementById("healthReport"), latest.summary ? [
+                {label: "Status", value: latest.status},
+                {label: "Time", value: latest.event_time},
+                {label: "Summary", value: latest.summary},
+            ] : [{label: "Status", value: "No report yet"}]);
+            renderAnalytics(data.analytics || {});
+            renderTableList(document.getElementById("feedbackList"), data.feedback || [], [
+                {label: "Query", key: "query"},
+                {label: "Feedback", key: "message"},
+                {label: "URL", key: "url"},
+            ]);
+        }
+
+        function renderAnalytics(analytics) {
+            renderCountList(document.getElementById("topQueries"), analytics.top_queries || []);
+            renderCountList(document.getElementById("zeroQueries"), analytics.zero_result_queries || []);
+            renderCountList(document.getElementById("topClicks"), analytics.top_clicks || []);
+        }
+
+        async function loadSynonyms() {
+            const data = await adminFetch("/api/admin/synonyms");
+            const node = document.getElementById("synonymList");
+            node.innerHTML = (data.synonyms || []).map(item => `
+                <div class="table-row">
+                    <div><span>Term</span><strong>${PortalSearch.escapeHtml(item.term)}</strong></div>
+                    <div><span>Variants</span><strong>${PortalSearch.escapeHtml((item.variants || []).join(", "))}</strong></div>
+                    <button class="ghost-button small-button" type="button" data-delete-synonym="${PortalSearch.escapeHtml(item.term)}">Delete</button>
+                </div>
+            `).join("") || `<div class="empty-state">No synonyms yet.</div>`;
+            node.querySelectorAll("[data-delete-synonym]").forEach(button => {
+                button.addEventListener("click", async () => {
+                    try {
+                        await adminFetch(`/api/admin/synonyms/${encodeURIComponent(button.dataset.deleteSynonym)}`, {method: "DELETE"});
+                        await loadSynonyms();
+                    } catch (error) {
+                        showAdminError(error);
+                    }
+                });
+            });
+        }
+
+        async function requeue(payload) {
+            if (!hasAdminSession()) {
+                setRequeueStatus("Login in the header before using targeted requeue.", true);
+                return;
+            }
+            const label = payload.mode === "category" ? payload.category : payload.mode;
+            setRequeueStatus(`Preparing ${label} requeue...`);
+            setRequeueBusy(true);
+            try {
+                const data = await adminFetch("/api/crawl/requeue", {method: "POST", body: JSON.stringify(payload)});
+                const count = data.requeued || 0;
+                pendingRequeueCount = count;
+                pendingRequeueMessageActive = count > 0;
+                setRequeueStatus(
+                    count
+                        ? `Queued ${count} URL(s). Open Knowledge Base Build and press Start Build to process them.`
+                        : "Nothing matched this requeue action.",
+                    false
+                );
+                await loadCrawlStatus();
+                await loadDiagnostics();
+            } catch (error) {
+                setRequeueStatus(error.message || String(error), true);
+                showAdminError(error);
+            } finally {
+                setRequeueBusy(false);
+            }
+        }
+
+        document.querySelectorAll(".tab").forEach(button => {
+            button.addEventListener("click", () => {
+                document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("is-active"));
+                document.querySelectorAll(".panel").forEach(panel => panel.classList.remove("is-active"));
+                button.classList.add("is-active");
+                document.getElementById(`tab-${button.dataset.tab}`).classList.add("is-active");
+                if (button.dataset.tab === "crawler") loadKbSources().catch(showAdminError);
+                if (button.dataset.tab === "diagnostics") loadDiagnostics().catch(showAdminError);
+                if (button.dataset.tab === "tuning") {
+                    loadDiagnostics().catch(showAdminError);
+                    loadSynonyms().catch(showAdminError);
+                }
+            });
+        });
+
+        document.getElementById("adminLoginForm").addEventListener("submit", async event => {
+            event.preventDefault();
+            try {
+                const response = await fetch("/api/admin/login", {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({
+                        username: document.getElementById("adminUsername").value.trim(),
+                        password: document.getElementById("adminPassword").value,
+                    }),
+                });
+                if (!response.ok) {
+                    throw new Error(response.status === 401 ? "Invalid admin username or password." : `Login failed: ${response.status}`);
+                }
+                const session = await response.json();
+                setLoginState({authenticated: true, username: session.username});
+                document.getElementById("adminPassword").value = "";
+                await loadKbSources();
+                const activeTab = document.querySelector(".tab.is-active")?.dataset.tab;
+                if (activeTab === "diagnostics") await loadDiagnostics();
+                if (activeTab === "tuning") {
+                    await loadDiagnostics();
+                    await loadSynonyms();
+                }
+            } catch (error) {
+                setLoginState({authenticated: false, username: ""});
+                showAdminError(error);
+            }
+        });
+        document.getElementById("adminLogoutButton").addEventListener("click", async () => {
+            await fetch("/api/admin/logout", {method: "POST", credentials: "same-origin"});
+            setLoginState({authenticated: false, username: ""});
+            setRequeueStatus("Login in the header before using targeted requeue.");
+            setKbSummaryStatus("Login in the header to inspect configured build sources.");
+            setKbBuildStatus("Login in the header before starting a build.");
+            setKbSourceFormStatus("Login in the header before changing sources.");
+        });
+        document.getElementById("startIncremental").addEventListener("click", () => {
+            const sourceIds = selectedBuildSourceIds();
+            if (!sourceIds.length) {
+                setKbBuildStatus("Select at least one build source.", true);
+                return;
+            }
+            postCrawl("/api/kb/build", {source_ids: sourceIds, reset: false, recreate_index: false});
+        });
+        document.getElementById("startFull").addEventListener("click", () => {
+            if (!hasAdminSession()) return;
+            const sourceIds = allEnabledSourceIds();
+            const selectedIds = selectedBuildSourceIds();
+            if (sourceIds.length !== selectedIds.length) {
+                setKbBuildStatus("Full Rebuild recreates the whole target index. Select every enabled source first.", true);
+                return;
+            }
+            const confirmed = window.confirm("Full Rebuild clears and recreates the whole target search index, then rebuilds all configured sources. Continue?");
+            if (confirmed) postCrawl("/api/kb/build", {source_ids: sourceIds, reset: true, recreate_index: true});
+        });
+        document.getElementById("stopCrawl").addEventListener("click", () => postCrawl("/api/crawl/stop"));
+        document.getElementById("refreshDiagnostics").addEventListener("click", () => loadDiagnostics().catch(showAdminError));
+        document.getElementById("refreshTuning").addEventListener("click", () => {
+            loadDiagnostics().catch(showAdminError);
+            loadSynonyms().catch(showAdminError);
+        });
+        document.getElementById("createHealthReport").addEventListener("click", async () => {
+            try {
+                const report = await adminFetch("/api/admin/health-report", {method: "POST"});
+                document.getElementById("healthReport").innerHTML = `<div class="compact-row"><span>Status</span><strong>${PortalSearch.escapeHtml(report.status)}</strong></div><div class="compact-row"><span>Summary</span><strong>${PortalSearch.escapeHtml(report.summary)}</strong></div>`;
+            } catch (error) {
+                showAdminError(error);
+            }
+        });
+        document.getElementById("openKbSourceDialog").addEventListener("click", openKbSourceDialog);
+        document.getElementById("closeKbSourceDialog").addEventListener("click", closeKbSourceDialog);
+        document.getElementById("cancelKbSourceDialog").addEventListener("click", closeKbSourceDialog);
+        document.querySelectorAll("input[name='kbSourceKind']").forEach(input => {
+            input.addEventListener("change", updateKbSourceDialogFields);
+        });
+        document.getElementById("saveKbSource").addEventListener("click", async () => {
+            try {
+                const config = selectedKbSourceConfig();
+                const payload = {
+                    name: document.getElementById("kbSourceName").value.trim(),
+                    type: config.type,
+                    location: document.getElementById("kbSourceLocation").value.trim(),
+                    enabled: true,
+                    options: {...config.options},
+                };
+                if (!payload.location) {
+                    setKbSourceDialogStatus(`Enter a ${config.locationLabel.toLowerCase()} first.`, true);
+                    return;
+                }
+                await adminFetch("/api/kb/sources", {method: "POST", body: JSON.stringify(payload)});
+                document.getElementById("kbSourceName").value = "";
+                document.getElementById("kbSourceLocation").value = "";
+                closeKbSourceDialog();
+                setKbSourceFormStatus(`${config.label} source saved. It is now available in Build source.`);
+                await loadKbSources();
+            } catch (error) {
+                setKbSourceDialogStatus(error.message || String(error), true);
+                showAdminErrorIfAuth(error);
+            }
+        });
+        document.getElementById("createKbBackup").addEventListener("click", async () => {
+            try {
+                const result = await adminFetch("/api/kb/backup", {method: "POST"});
+                setKbBackupStatus(`Backup created: ${result.path}`);
+            } catch (error) {
+                setKbBackupStatus(error.message || String(error), true);
+                showAdminErrorIfAuth(error);
+            }
+        });
+        document.querySelectorAll("[data-requeue-mode]").forEach(button => {
+            button.addEventListener("click", () => requeue({mode: button.dataset.requeueMode, category: button.dataset.requeueCategory || ""}));
+        });
+        document.getElementById("requeueOneUrl").addEventListener("click", () => {
+            const url = document.getElementById("requeueUrl").value.trim();
+            if (!url) {
+                setRequeueStatus("Enter a specific URL first.", true);
+                return;
+            }
+            requeue({mode: "url", url});
+        });
+        document.getElementById("saveSynonym").addEventListener("click", async () => {
+            try {
+                const term = document.getElementById("synonymTerm").value;
+                const variants = document.getElementById("synonymVariants").value.split(",").map(item => item.trim()).filter(Boolean);
+                await adminFetch("/api/admin/synonyms", {method: "POST", body: JSON.stringify({term, variants})});
+                document.getElementById("synonymTerm").value = "";
+                document.getElementById("synonymVariants").value = "";
+                await loadSynonyms();
+            } catch (error) {
+                showAdminError(error);
+            }
+        });
+
+        PortalSearch.mountSearch(document.getElementById("tab-search"), {size: 30, sourceScope: "portal", allowSourceScope: true});
+        updateKbSourceDialogFields();
+        checkAdminSession().catch(() => setLoginState({authenticated: false, username: ""}));
+        loadCrawlStatus();
+        loadKbSources().catch(() => {});
+        setInterval(loadCrawlStatus, 3000);
+    </script>
+</body>
+</html>

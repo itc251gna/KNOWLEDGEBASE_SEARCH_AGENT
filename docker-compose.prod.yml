@@ -1,0 +1,88 @@
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${OPENSEARCH_INITIAL_ADMIN_PASSWORD:-change-this-opensearch-bootstrap-password}"
+      bootstrap.memory_lock: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    expose:
+      - "9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  tika:
+    build:
+      context: ./docker/tika
+    restart: unless-stopped
+    expose:
+      - "9998"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9998/tika >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  app:
+    build: .
+    init: true
+    user: "10001:10001"
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      tika:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:${APP_UPSTREAM_PORT:-18080}:8080"
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  scheduler:
+    build: .
+    init: true
+    user: "10001:10001"
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      opensearch:
+        condition: service_healthy
+      tika:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    command: ["python", "-m", "portal_search_agent.cli", "scheduler"]
+    profiles:
+      - scheduler
+
+volumes:
+  opensearch-data:

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="el">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Portal Search</title>
+    <link rel="stylesheet" href="/static/styles.css?v=portal-search-5">
+</head>
+<body class="embed-body">
+    <main class="embed-shell">
+        <header class="embed-header">
+            <h1>Portal Search</h1>
+            <p>{{ start_url }}</p>
+        </header>
+
+        <section class="searchbar" aria-label="Portal search">
+            <input id="query" data-search-query type="search" autocomplete="off" list="searchSuggestions" placeholder="Search pages, applications, PDFs, Word, Excel and announcements">
+            <button data-search-button type="button">Search</button>
+        </section>
+        <datalist id="searchSuggestions" data-search-suggestions></datalist>
+        <section class="source-row" data-search-source-scopes aria-label="Knowledge base source"></section>
+        <section class="filter-row" data-search-filters aria-label="Search filters"></section>
+
+        <div id="status" class="status" data-search-status>Type at least 2 characters.</div>
+        <section id="results" class="results" data-search-results aria-live="polite"></section>
+    </main>
+
+    <script src="/static/portal_search.js?v=portal-search-5"></script>
+    <script>PortalSearch.mountSearch(document, {size: 30, sourceScope: "portal", allowSourceScope: true});</script>
+</body>
+</html>
