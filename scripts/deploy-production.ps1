@@ -123,6 +123,7 @@ if ([string]::IsNullOrWhiteSpace($Commit)) {
 Write-Host "Deploy commit: $deployCommit"
 
 $shortCommit = $deployCommit.Substring(0, 12)
+$bundleRef = "refs/portal-search-deploy/$shortCommit"
 $remoteBundlePath = "/tmp/portal-search-agent-$shortCommit.bundle"
 $remoteScriptPath = "/tmp/portal-search-agent-deploy-$shortCommit.sh"
 $buildServices = "app"
@@ -132,6 +133,7 @@ if ($BuildTika) {
 
 $quotedRemotePath = ConvertTo-ShellLiteral -Value $RemotePath
 $quotedDeployCommit = ConvertTo-ShellLiteral -Value $deployCommit
+$quotedBundleRef = ConvertTo-ShellLiteral -Value $bundleRef
 $quotedRemoteBundlePath = ConvertTo-ShellLiteral -Value $remoteBundlePath
 $quotedRemoteScriptPath = ConvertTo-ShellLiteral -Value $remoteScriptPath
 
@@ -148,7 +150,7 @@ if [ -n "`$(git status --porcelain=v1)" ]; then
     exit 20
 fi
 
-git fetch $quotedRemoteBundlePath HEAD
+git fetch $quotedRemoteBundlePath $quotedBundleRef
 git checkout --detach FETCH_HEAD
 actual_commit="`$(git rev-parse HEAD)"
 if [ "`$actual_commit" != $quotedDeployCommit ]; then
@@ -180,7 +182,8 @@ try {
         Remove-Item $tempScript -Force
     }
 
-    Invoke-Git -Arguments @("bundle", "create", $tempBundle, $deployCommit) | Out-Null
+    Invoke-Git -Arguments @("update-ref", $bundleRef, $deployCommit) | Out-Null
+    Invoke-Git -Arguments @("bundle", "create", $tempBundle, $bundleRef) | Out-Null
     [System.IO.File]::WriteAllText($tempScript, ($remoteScript -replace "`r`n", "`n"), [System.Text.Encoding]::ASCII)
 
     $scpArgs = @()
@@ -199,6 +202,14 @@ try {
     Write-Host "Deploying to $Server..."
     Invoke-NativeChecked -FilePath "ssh" -Arguments ($sshArgs + @($Server, "bash", $remoteScriptPath))
 } finally {
+    $oldErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & git update-ref -d $bundleRef 2>$null
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
+
     if (Test-Path $tempBundle) {
         Remove-Item $tempBundle -Force
     }
