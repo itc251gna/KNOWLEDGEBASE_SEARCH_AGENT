@@ -6,6 +6,7 @@ param(
     [string]$SshKey = "",
     [string]$RemotePath = "/home/kmh251/deployment/portal-search-agent",
     [string]$BaseUrl = "https://knowledgebase-search.251gh.local",
+    [int]$SmokeWaitSeconds = 90,
     [switch]$BuildTika,
     [switch]$SkipSmokeTest,
     [switch]$DryRun
@@ -90,6 +91,36 @@ function ConvertTo-ShellLiteral {
     )
 
     return "'" + ($Value -replace "'", "'\''") + "'"
+}
+
+function Wait-HttpHealth {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Url,
+        [int]$TimeoutSeconds = 90
+    )
+
+    $healthUrl = "$Url/health"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+    while ((Get-Date) -lt $deadline) {
+        $oldErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            & curl.exe -k -fsS --max-time 5 $healthUrl *> $null
+            $exitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $oldErrorActionPreference
+        }
+
+        if ($exitCode -eq 0) {
+            return
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    throw "Timed out waiting for $healthUrl after $TimeoutSeconds seconds."
 }
 
 Write-Host "Checking local production deploy preconditions..."
@@ -219,6 +250,9 @@ try {
 }
 
 if (!$SkipSmokeTest) {
+    Write-Host "Waiting for production health..."
+    Wait-HttpHealth -Url $BaseUrl -TimeoutSeconds $SmokeWaitSeconds
+
     Write-Host "Running production smoke test..."
     & "$PSScriptRoot\production-smoke-test.ps1" -BaseUrl $BaseUrl
     if ($LASTEXITCODE -ne 0) {
