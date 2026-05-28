@@ -120,7 +120,7 @@ docker compose down
 
 ## Production Docker deployment
 
-The production stack is isolated from WordPress. Docker runs the app, OpenSearch, Tika, and the optional scheduler. The app is bound only to the local host as an upstream service, and the existing production Nginx terminates HTTPS on the intranet.
+The production stack is isolated from WordPress. Docker runs the app, OpenSearch, Tika, and the optional scheduler. The app is bound only to the local host as an upstream service, and the unified Docker NGINX gateway terminates HTTPS on the intranet.
 
 Production deploys should be done only from a clean `main` checkout and a commit that exists on `origin/main`. Do not deploy uncommitted local files or ad hoc server edits.
 
@@ -135,7 +135,7 @@ Edit `.env.production` before starting:
 
 ```env
 PORTAL_HOST_IP=10.4.51.65
-PUBLIC_BASE_URL=https://10.4.51.232:18443
+PUBLIC_BASE_URL=https://knowledgebase-search.251gh.local
 APP_UPSTREAM_PORT=18085
 OPENSEARCH_INITIAL_ADMIN_PASSWORD=<long-random-bootstrap-password>
 ADMIN_USERNAME=admin
@@ -145,7 +145,15 @@ ADMIN_TOKEN=<long-random-token>
 ADMIN_COOKIE_SECURE=true
 ```
 
-Install the production Nginx site on the server:
+Production ingress is handled by the unified Docker gateway in `/home/kmh251/deployment/app_gateway`, which proxies `https://knowledgebase-search.251gh.local` to `127.0.0.1:18085`. After changing ingress-related settings, reload the gateway:
+
+```bash
+cd /home/kmh251/deployment/app_gateway
+sudo docker compose up -d
+sudo docker exec app-gateway-nginx nginx -t
+```
+
+The legacy host Nginx config is kept only as a rollback reference:
 
 ```bash
 sudo mkdir -p /etc/ssl/portal-search
@@ -155,7 +163,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-The Nginx site expects TLS files at `/etc/ssl/portal-search/portal-search.crt` and `/etc/ssl/portal-search/portal-search.key`.
+The legacy Nginx site expects TLS files at `/etc/ssl/portal-search/portal-search.crt` and `/etc/ssl/portal-search/portal-search.key`. Do not start the old host/system Nginx unless intentionally rolling back from the unified gateway.
 
 On Linux, if the app cannot write to `data/`, grant the app container UID access:
 
@@ -202,7 +210,7 @@ docker compose -f docker-compose.prod.yml --profile scheduler up -d scheduler
 Smoke test:
 
 ```powershell
-.\scripts\production-smoke-test.ps1 -BaseUrl https://10.4.51.232:18443
+.\scripts\production-smoke-test.ps1 -BaseUrl https://knowledgebase-search.251gh.local
 ```
 
 ## Nightly crawling

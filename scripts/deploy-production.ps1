@@ -5,7 +5,7 @@ param(
     [string]$Server = "kmh251@10.4.51.232",
     [string]$SshKey = "",
     [string]$RemotePath = "/home/kmh251/deployment/portal-search-agent",
-    [string]$BaseUrl = "https://10.4.51.232:18443",
+    [string]$BaseUrl = "https://knowledgebase-search.251gh.local",
     [switch]$SkipSmokeTest,
     [switch]$DryRun
 )
