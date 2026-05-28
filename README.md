@@ -122,6 +122,8 @@ docker compose down
 
 The production stack is isolated from WordPress. Docker runs the app, OpenSearch, Tika, and the optional scheduler. The app is bound only to the local host as an upstream service, and the existing production Nginx terminates HTTPS on the intranet.
 
+Production deploys should be done only from a clean `main` checkout and a commit that exists on `origin/main`. Do not deploy uncommitted local files or ad hoc server edits.
+
 Prepare the production environment on the server:
 
 ```bash
@@ -161,7 +163,31 @@ On Linux, if the app cannot write to `data/`, grant the app container UID access
 sudo chown -R 10001:10001 data
 ```
 
-Start production:
+Use the guarded deploy script from the Windows development workstation:
+
+```powershell
+.\scripts\deploy-production.ps1 `
+  -SshKey C:\Users\vmarkopoulos\.ssh\archived_old_ssh_keys_20260527_210751\kai_archive_github
+```
+
+To deploy a specific known commit from `main`, pass it explicitly:
+
+```powershell
+.\scripts\deploy-production.ps1 `
+  -Commit <commit-sha-from-main> `
+  -SshKey C:\Users\vmarkopoulos\.ssh\archived_old_ssh_keys_20260527_210751\kai_archive_github
+```
+
+The script blocks deployment when:
+
+- the local workspace has uncommitted changes
+- the local branch is not `main`
+- the selected commit is not reachable from `origin/main`
+- the production checkout has uncommitted changes
+- production compose config validation fails
+- the post-deploy smoke test fails
+
+Manual production start, for emergency use only after the same clean-commit checks:
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
