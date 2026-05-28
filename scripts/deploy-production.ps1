@@ -6,6 +6,7 @@ param(
     [string]$SshKey = "",
     [string]$RemotePath = "/home/kmh251/deployment/portal-search-agent",
     [string]$BaseUrl = "https://knowledgebase-search.251gh.local",
+    [switch]$BuildTika,
     [switch]$SkipSmokeTest,
     [switch]$DryRun
 )
@@ -60,6 +61,28 @@ function Assert-GitSuccess {
     }
 }
 
+function Invoke-NativeChecked {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    $oldErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & $FilePath @Arguments
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
+
+    if ($exitCode -ne 0) {
+        throw "$FilePath $($Arguments -join ' ') failed with exit code $exitCode."
+    }
+}
+
 function ConvertTo-ShellLiteral {
     param(
         [Parameter(Mandatory = $true)]
@@ -99,48 +122,89 @@ if ([string]::IsNullOrWhiteSpace($Commit)) {
 
 Write-Host "Deploy commit: $deployCommit"
 
+$shortCommit = $deployCommit.Substring(0, 12)
+$remoteBundlePath = "/tmp/portal-search-agent-$shortCommit.bundle"
+$remoteScriptPath = "/tmp/portal-search-agent-deploy-$shortCommit.sh"
+$buildServices = "app"
+if ($BuildTika) {
+    $buildServices = "app tika"
+}
+
 $quotedRemotePath = ConvertTo-ShellLiteral -Value $RemotePath
 $quotedDeployCommit = ConvertTo-ShellLiteral -Value $deployCommit
-$quotedBranch = ConvertTo-ShellLiteral -Value $Branch
-$quotedRemoteBranch = ConvertTo-ShellLiteral -Value "origin/$Branch"
+$quotedRemoteBundlePath = ConvertTo-ShellLiteral -Value $remoteBundlePath
+$quotedRemoteScriptPath = ConvertTo-ShellLiteral -Value $remoteScriptPath
 
 $remoteScript = @"
 set -eu
+trap 'rm -f $remoteBundlePath $remoteScriptPath' EXIT
+
 cd $quotedRemotePath
 
 echo "Checking production checkout..."
-git fetch origin $quotedBranch
-
 if [ -n "`$(git status --porcelain=v1)" ]; then
     echo "Production deploy blocked because the production checkout is not clean:" >&2
     git status --short >&2
     exit 20
 fi
 
-git merge-base --is-ancestor $quotedDeployCommit $quotedRemoteBranch
-git checkout --detach $quotedDeployCommit
+git fetch $quotedRemoteBundlePath HEAD
+git checkout --detach FETCH_HEAD
+actual_commit="`$(git rev-parse HEAD)"
+if [ "`$actual_commit" != $quotedDeployCommit ]; then
+    echo "Production deploy blocked because checkout resolved to `$actual_commit instead of $deployCommit." >&2
+    exit 21
+fi
 
 docker compose -f docker-compose.prod.yml config --quiet
-docker compose -f docker-compose.prod.yml up -d --build opensearch tika app
+DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker compose -f docker-compose.prod.yml build --pull=false $buildServices
+docker compose -f docker-compose.prod.yml up -d --no-build opensearch tika app
 docker compose -f docker-compose.prod.yml ps
 "@
 
 if ($DryRun) {
-    Write-Host "Dry run only. Remote script that would be executed:"
+    Write-Host "Dry run only. A git bundle for the commit would be uploaded to $remoteBundlePath."
+    Write-Host "Remote script that would be executed:"
     Write-Host $remoteScript
     exit 0
 }
 
-$sshArgs = @()
-if (![string]::IsNullOrWhiteSpace($SshKey)) {
-    $sshArgs += @("-i", $SshKey)
-}
-$sshArgs += @("-o", "StrictHostKeyChecking=no", $Server, "bash -s")
+$tempBundle = Join-Path ([System.IO.Path]::GetTempPath()) "portal-search-agent-$shortCommit.bundle"
+$tempScript = Join-Path ([System.IO.Path]::GetTempPath()) "portal-search-agent-deploy-$shortCommit.sh"
 
-Write-Host "Deploying to $Server..."
-$remoteScript | & ssh @sshArgs
-if ($LASTEXITCODE -ne 0) {
-    throw "Production deploy failed on $Server."
+try {
+    if (Test-Path $tempBundle) {
+        Remove-Item $tempBundle -Force
+    }
+    if (Test-Path $tempScript) {
+        Remove-Item $tempScript -Force
+    }
+
+    Invoke-Git -Arguments @("bundle", "create", $tempBundle, $deployCommit) | Out-Null
+    [System.IO.File]::WriteAllText($tempScript, ($remoteScript -replace "`r`n", "`n"), [System.Text.Encoding]::ASCII)
+
+    $scpArgs = @()
+    $sshArgs = @()
+    if (![string]::IsNullOrWhiteSpace($SshKey)) {
+        $scpArgs += @("-i", $SshKey)
+        $sshArgs += @("-i", $SshKey)
+    }
+    $scpArgs += @("-o", "StrictHostKeyChecking=no")
+    $sshArgs += @("-o", "StrictHostKeyChecking=no")
+
+    Write-Host "Uploading deploy bundle to $Server..."
+    Invoke-NativeChecked -FilePath "scp" -Arguments ($scpArgs + @($tempBundle, "${Server}:$remoteBundlePath"))
+    Invoke-NativeChecked -FilePath "scp" -Arguments ($scpArgs + @($tempScript, "${Server}:$remoteScriptPath"))
+
+    Write-Host "Deploying to $Server..."
+    Invoke-NativeChecked -FilePath "ssh" -Arguments ($sshArgs + @($Server, "bash", $remoteScriptPath))
+} finally {
+    if (Test-Path $tempBundle) {
+        Remove-Item $tempBundle -Force
+    }
+    if (Test-Path $tempScript) {
+        Remove-Item $tempScript -Force
+    }
 }
 
 if (!$SkipSmokeTest) {

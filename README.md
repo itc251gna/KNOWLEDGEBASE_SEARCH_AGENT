@@ -195,6 +195,8 @@ The script blocks deployment when:
 - production compose config validation fails
 - the post-deploy smoke test fails
 
+The script uploads the selected commit as a git bundle, so production does not need direct GitHub access during deployment. It rebuilds the app image from the server's local Docker cache with `--pull=false`; use `-BuildTika` only when the Tika image/Dockerfile intentionally changed.
+
 Manual production start, for emergency use only after the same clean-commit checks:
 
 ```bash
